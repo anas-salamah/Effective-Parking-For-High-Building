@@ -1,0 +1,127 @@
+
+#include <SPI.h>
+#include <MFRC522.h>
+#include <Servo.h>
+#define SS_PIN 10
+#define RST_PIN 9
+#define LED_PIN 7
+#define BUZZER_PIN 2
+MFRC522 mfrc522(SS_PIN, RST_PIN);
+Servo servo1;
+Servo servo2;
+Servo servo3;
+Servo servo4;
+const int sensorPin1 = A0;
+const int sensorPin2 = A1;
+const int sensorPin3 = A2;
+const int sensorPin4 = A3;
+int sensorValue1 = 0;
+int sensorValue2 = 0;
+int sensorValue3 = 0;
+int sensorValue4 = 0;
+enum GateState {
+ CLOSED,
+ OPEN,
+ CAR_ENTERED,
+ CAR_EXITED
+};
+struct Gate {
+ Servo servo;
+ int sensorPin;
+ GateState state;
+};
+Gate gate1 = {servo1, sensorPin1, CLOSED};
+Gate gate2 = {servo2, sensorPin2, CLOSED};
+Gate gate3 = {servo3, sensorPin3, CLOSED};
+Gate gate4 = {servo4, sensorPin4, CLOSED};
+void setup() {
+ Serial.begin(9600);
+ SPI.begin();
+ mfrc522.PCD_Init();
+ servo1.attach(3);
+servo2.attach(4);
+ servo3.attach(5);
+ servo4.attach(6);
+ pinMode(LED_PIN, OUTPUT);
+ pinMode(BUZZER_PIN, OUTPUT);
+ noTone(BUZZER_PIN);
+ closeGate(gate1);
+ closeGate(gate2);
+ closeGate(gate3);
+ closeGate(gate4);
+}
+void loop() {
+ if (mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()) {
+ byte uid[4];
+ for (byte i = 0; i < mfrc522.uid.size; i++) {
+ uid[i] = mfrc522.uid.uidByte[i];
+ }
+ Serial.print("RFID card detected with UID: ");
+ for (byte i = 0; i < mfrc522.uid.size; i++) {
+ Serial.print(uid[i] < 0x10 ? "0" : "");
+ Serial.print(uid[i], HEX);
+ }
+ Serial.println();
+ if (checkCardUID(uid, 0x93, 0xA0, 0x86, 0xA9)) {
+ processCard(gate1);
+ } else if (checkCardUID(uid, 0x93, 0x50, 0x6D, 0xA9)) {
+ processCard(gate2);
+ } else if (checkCardUID(uid, 0x33, 0x39, 0x6D, 0xA9)) {
+processCard(gate3);
+ } else if (checkCardUID(uid, 0xA3, 0x31, 0x69, 0xA9)) {
+ processCard(gate4);
+ }
+ }
+ 
+ checkGate(gate1);
+ checkGate(gate2);
+ checkGate(gate3);
+ checkGate(gate4);
+}
+bool checkCardUID(byte* uid, byte b0, byte b1, byte b2, byte b3) {
+ return (uid[0] == b0 && uid[1] == b1 && uid[2] == b2 && uid[3] == b3);
+}
+void processCard(Gate& gate) {
+ Serial.println("Card detected!");
+ digitalWrite(LED_PIN, HIGH);
+ tone(BUZZER_PIN, 500);
+ delay(300);
+ noTone(BUZZER_PIN);
+ delay(300);
+ digitalWrite(LED_PIN, LOW);
+ if (gate.state == CLOSED) {
+ openGate(gate);
+ }
+}
+void checkGate(Gate& gate) {
+ if (gate.state == OPEN || gate.state == CAR_ENTERED) {
+if (gate.state == OPEN) {
+ int sensorValue = analogRead(gate.sensorPin);
+ if (sensorValue < 500) {
+ Serial.println("Car detected!");
+ gate.state = CAR_ENTERED;
+ }
+ } else if (gate.state == CAR_ENTERED) {
+ int sensorValue = analogRead(gate.sensorPin);
+ if (sensorValue > 500) 
+ delay(5000);
+{ Serial.println("Car moved!");
+ gate.state = CAR_EXITED;
+ 
+ }
+ }
+ }
+ 
+ if (gate.state == CAR_EXITED) {
+ closeGate(gate);
+ }
+}
+void openGate(Gate& gate) {
+ gate.servo.write(130);
+ gate.state = OPEN;
+}
+void closeGate(Gate& gate) {
+ gate.servo.write(30);
+ gate.state = CLOSED;
+}
+}
